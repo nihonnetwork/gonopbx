@@ -12,7 +12,7 @@ import logging
 import re
 import os
 
-from database import get_db, IVRMenu, IVROption, SIPPeer, RingGroup, User, InboundRoute, CallForward, VoicemailMailbox, SIPTrunk
+from database import get_db, IVRMenu, IVROption, SIPPeer, RingGroup, ConferenceRoom, User, InboundRoute, CallForward, VoicemailMailbox, SIPTrunk
 from auth import get_current_user
 from dialplan import write_extensions_config, reload_dialplan
 from queue_config import write_queues_config, reload_queues
@@ -80,7 +80,8 @@ def _validate_destination(db: Session, dest: str | None):
     peer = db.query(SIPPeer).filter(SIPPeer.extension == dest).first()
     group = db.query(RingGroup).filter(RingGroup.extension == dest).first()
     ivr = db.query(IVRMenu).filter(IVRMenu.extension == dest).first()
-    if not peer and not group and not ivr:
+    conf = db.query(ConferenceRoom).filter(ConferenceRoom.extension == dest).first()
+    if not peer and not group and not ivr and not conf:
         raise HTTPException(status_code=400, detail=f"Ziel {dest} nicht gefunden")
 
 
@@ -137,8 +138,9 @@ def _regenerate_all(db: Session):
     all_trunks = db.query(SIPTrunk).all()
     all_groups = db.query(RingGroup).all()
     all_ivr = db.query(IVRMenu).all()
+    all_conferences = db.query(ConferenceRoom).all()
 
-    write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr)
+    write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr, all_conferences)
     reload_dialplan()
     write_queues_config(all_groups)
     reload_queues()
@@ -179,6 +181,8 @@ def create_menu(menu: IVRMenuCreate, request: Request, current_user: User = Depe
         raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Nebenstelle vergeben")
     if db.query(RingGroup).filter(RingGroup.extension == menu.extension).first():
         raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Gruppe vergeben")
+    if db.query(ConferenceRoom).filter(ConferenceRoom.extension == menu.extension).first():
+        raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Konferenz vergeben")
 
     if menu.timeout_seconds < 2 or menu.timeout_seconds > 30:
         raise HTTPException(status_code=400, detail="Timeout muss zwischen 2 und 30 Sekunden liegen")
@@ -238,6 +242,8 @@ def update_menu(menu_id: int, menu: IVRMenuUpdate, request: Request, current_use
             raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Nebenstelle vergeben")
         if db.query(RingGroup).filter(RingGroup.extension == menu.extension).first():
             raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Gruppe vergeben")
+        if db.query(ConferenceRoom).filter(ConferenceRoom.extension == menu.extension).first():
+            raise HTTPException(status_code=400, detail="IVR-Nummer ist bereits als Konferenz vergeben")
 
     if menu.timeout_seconds < 2 or menu.timeout_seconds > 30:
         raise HTTPException(status_code=400, detail="Timeout muss zwischen 2 und 30 Sekunden liegen")

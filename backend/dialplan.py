@@ -6,7 +6,7 @@ import os
 import logging
 import subprocess
 from typing import List, Optional
-from database import InboundRoute, CallForward, VoicemailMailbox, SIPPeer, SIPTrunk, RingGroup, IVRMenu
+from database import InboundRoute, CallForward, VoicemailMailbox, SIPPeer, SIPTrunk, RingGroup, IVRMenu, ConferenceRoom
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,29 @@ def _generate_ring_group_logic(group: RingGroup) -> str:
     return "\n".join(lines)
 
 
+def _generate_conference_logic(room: ConferenceRoom) -> str:
+    lines = []
+    lines.append(' same => n,Answer()')
+    lines.append(' same => n,Wait(0.5)')
+    if getattr(room, 'pin', None) or getattr(room, 'admin_pin', None):
+        lines.append(' same => n,Read(CONF_PIN,confbridge-pin,12,,3,10)')
+        if getattr(room, 'admin_pin', None):
+            lines.append(f' same => n,GotoIf($["${{CONF_PIN}}" = "{room.admin_pin}"]?admin)')
+        if getattr(room, 'pin', None):
+            lines.append(f' same => n,GotoIf($["${{CONF_PIN}}" = "{room.pin}"]?user)')
+        lines.append(' same => n,Playback(auth-incorrect)')
+        lines.append(' same => n,Hangup()')
+        lines.append(f' same => n(user),ConfBridge({room.extension},room-{room.id},user-{room.id})')
+        lines.append(' same => n,Hangup()')
+        if getattr(room, 'admin_pin', None):
+            lines.append(f' same => n(admin),ConfBridge({room.extension},room-{room.id},admin-{room.id})')
+            lines.append(' same => n,Hangup()')
+    else:
+        lines.append(f' same => n,ConfBridge({room.extension},room-{room.id},user-{room.id})')
+        lines.append(' same => n,Hangup()')
+    return "\n".join(lines)
+
+
 def _generate_ivr_context(menu: IVRMenu) -> str:
     ctx = f"[ivr-{menu.id}]\n"
     ctx += "exten => s,1,NoOp(IVR Menu)\n"
@@ -177,7 +200,7 @@ def _generate_ivr_context(menu: IVRMenu) -> str:
     return ctx
 
 
-def generate_extensions_config(routes: List[InboundRoute], forwards: Optional[List[CallForward]] = None, mailboxes: Optional[List[VoicemailMailbox]] = None, peers: Optional[List[SIPPeer]] = None, trunks: Optional[List[SIPTrunk]] = None, ring_groups: Optional[List[RingGroup]] = None, ivr_menus: Optional[List[IVRMenu]] = None) -> str:
+def generate_extensions_config(routes: List[InboundRoute], forwards: Optional[List[CallForward]] = None, mailboxes: Optional[List[VoicemailMailbox]] = None, peers: Optional[List[SIPPeer]] = None, trunks: Optional[List[SIPTrunk]] = None, ring_groups: Optional[List[RingGroup]] = None, ivr_menus: Optional[List[IVRMenu]] = None, conference_rooms: Optional[List[ConferenceRoom]] = None) -> str:
     """Generate extensions.conf with internal context, outbound routing, call forwarding, and from-trunk inbound routing"""
 
     fwd_map = _build_forward_map(forwards or [])
@@ -213,6 +236,11 @@ clearglobalvars=no
         for m in ivr_menus:
             ivr_map[m.extension] = m
 
+    conference_map = {}
+    if conference_rooms:
+        for c in conference_rooms:
+            conference_map[c.extension] = c
+
     # Ring groups (exact extensions)
     if ring_groups:
         for g in ring_groups:
@@ -230,6 +258,15 @@ clearglobalvars=no
                 continue
             config += f"exten => {m.extension},1,NoOp(IVR {m.name})\n"
             config += f" same => n,Goto(ivr-{m.id},s,1)\n\n"
+
+    # Conference rooms (exact extensions)
+    if conference_rooms:
+        for c in conference_rooms:
+            if not c.enabled:
+                continue
+            config += f"exten => {c.extension},1,NoOp(Conference Room {c.name})\n"
+            config += _generate_conference_logic(c)
+            config += "\n\n"
 
     # Internal extension dialing pattern
     config += "exten => _1XXX,1,NoOp(Internal Call from ${CALLERID(all)} to ${EXTEN})\n"
@@ -368,6 +405,7 @@ exten => s,1,NoOp(Inbound call with no DID in Request-URI)
             # If destination is a ring group, route to queue
             rg = ring_group_map.get(ext)
             ivr = ivr_map.get(ext)
+            conf = conference_map.get(ext)
             if ivr and ivr.enabled:
                 config += " same => n,Answer()\n"
                 config += " same => n,Wait(0.5)\n"
@@ -376,6 +414,8 @@ exten => s,1,NoOp(Inbound call with no DID in Request-URI)
                 config += " same => n,Answer()\n"
                 config += " same => n,Wait(0.5)\n"
                 config += _generate_ring_group_logic(rg)
+            elif conf and conf.enabled:
+                config += _generate_conference_logic(conf)
             else:
                 ext_ring = ring_timeout_map.get(ext, 20)
                 config += _generate_dial_logic(ext, fwd_map, ext_ring, early_answer=True)
@@ -403,10 +443,10 @@ exten => _[+0-9].,1,NoOp(Unmatched inbound DID ${EXTEN})
     return config
 
 
-def write_extensions_config(routes: List[InboundRoute], forwards: Optional[List[CallForward]] = None, mailboxes: Optional[List[VoicemailMailbox]] = None, peers: Optional[List[SIPPeer]] = None, trunks: Optional[List[SIPTrunk]] = None, ring_groups: Optional[List[RingGroup]] = None, ivr_menus: Optional[List[IVRMenu]] = None) -> bool:
+def write_extensions_config(routes: List[InboundRoute], forwards: Optional[List[CallForward]] = None, mailboxes: Optional[List[VoicemailMailbox]] = None, peers: Optional[List[SIPPeer]] = None, trunks: Optional[List[SIPTrunk]] = None, ring_groups: Optional[List[RingGroup]] = None, ivr_menus: Optional[List[IVRMenu]] = None, conference_rooms: Optional[List[ConferenceRoom]] = None) -> bool:
     """Write extensions.conf to shared volume"""
     try:
-        config_content = generate_extensions_config(routes, forwards, mailboxes, peers, trunks, ring_groups, ivr_menus)
+        config_content = generate_extensions_config(routes, forwards, mailboxes, peers, trunks, ring_groups, ivr_menus, conference_rooms)
 
         os.makedirs(os.path.dirname(EXTENSIONS_CONFIG_PATH), exist_ok=True)
 

@@ -206,7 +206,7 @@ export default function SettingsPage() {
     const trimmed = newIp.trim()
     if (!trimmed) return
     if (whitelistIps.includes(trimmed)) {
-      setError('Diese IP ist bereits in der Liste')
+      setError(tr('Diese IP ist bereits in der Liste', 'This IP is already in the list'))
       return
     }
     setWhitelistIps([...whitelistIps, trimmed])
@@ -249,7 +249,7 @@ export default function SettingsPage() {
       const info = await api.checkUpdate()
       setUpdateInfo(info)
       if (!info.update_available) {
-        setSuccess('GonoPBX ist auf dem neuesten Stand')
+        setSuccess(tr('GonoPBX ist auf dem neuesten Stand', 'GonoPBX is up to date'))
       }
     } catch (err: any) {
       setError(err.message || tr('Update-Prüfung fehlgeschlagen', 'Update check failed'))
@@ -259,13 +259,13 @@ export default function SettingsPage() {
   }
 
   const handleRestartService = async (service: string) => {
-    if (!confirm(`Service "${service}" wirklich neu starten?`)) return
+    if (!confirm(tr(`Service "${service}" wirklich neu starten?`, `Really restart service "${service}"?`))) return
     setRestartingService(service)
     setError('')
     setSuccess('')
     try {
       await api.restartService(service)
-      setSuccess(`Service "${service}" wird neu gestartet`)
+      setSuccess(tr(`Service "${service}" wird neu gestartet`, `Service "${service}" is restarting`))
       setTimeout(fetchServerInfo, 5000)
     } catch (err: any) {
       setError(err.message || tr('Neustart fehlgeschlagen', 'Restart failed'))
@@ -283,7 +283,7 @@ export default function SettingsPage() {
       await api.rebootServer()
       setSuccess(tr('Server wird neu gestartet...', 'Server is rebooting...'))
     } catch (err: any) {
-      setError(err.message || 'Reboot fehlgeschlagen')
+      setError(err.message || tr('Reboot fehlgeschlagen', 'Reboot failed'))
       setRebooting(false)
     }
   }
@@ -383,7 +383,7 @@ export default function SettingsPage() {
       setHaData(prev => ({ ...prev, ha_api_key: result.key }))
       setShowHaApiKey(true)
     } catch (err: any) {
-      setError(err.message || 'Key-Generierung fehlgeschlagen')
+      setError(err.message || tr('Key-Generierung fehlgeschlagen', 'Key generation failed'))
     } finally {
       setGeneratingKey(false)
     }
@@ -1073,10 +1073,10 @@ export default function SettingsPage() {
                   <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-900/50 p-2 rounded font-mono overflow-x-auto">
 {`rest_command:
   gonopbx_call:
-    url: "https://IHRE-PBX-IP/api/calls/originate"
+    url: "https://YOUR-PBX-IP/api/calls/originate"
     method: POST
     headers:
-      X-API-Key: "IHR-API-KEY"
+      X-API-Key: "YOUR-API-KEY"
     payload: '{"extension":"{{extension}}","number":"{{number}}"}'`}
                   </pre>
                 </div>

@@ -182,6 +182,22 @@ class IVROption(Base):
 
     menu = relationship("IVRMenu", back_populates="options")
 
+class ConferenceRoom(Base):
+    __tablename__ = "conference_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    extension = Column(String(20), unique=True, nullable=False, index=True)
+    pin = Column(String(20), nullable=True)
+    admin_pin = Column(String(20), nullable=True)
+    max_participants = Column(Integer, default=20)
+    inbound_trunk_id = Column(Integer, ForeignKey("sip_trunks.id"), nullable=True)
+    inbound_did = Column(String(50), nullable=True)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class InboundRoute(Base):
     __tablename__ = "inbound_routes"
 

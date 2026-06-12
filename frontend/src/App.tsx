@@ -18,7 +18,7 @@ type Page = 'dashboard' | 'extension-detail' | 'trunk-detail' | 'cdr' | 'setting
 function AppContent() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { tr } = useI18n()
+  const { tr, lang, setLang } = useI18n()
   const [currentPage, setCurrentPage] = useState<Page>('dashboard')
   const [selectedExtension, setSelectedExtension] = useState<string>('')
   const [selectedTrunkId, setSelectedTrunkId] = useState<number>(0)
@@ -154,6 +154,18 @@ function AppContent() {
                 )
               })}
 
+              {/* Language selector */}
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as 'de' | 'en')}
+                className="ml-2 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-600 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                aria-label={tr('Sprache auswählen', 'Select language')}
+                title={tr('Sprache auswählen', 'Select language')}
+              >
+                <option value="en">EN</option>
+                <option value="de">DE</option>
+              </select>
+
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
@@ -222,6 +234,15 @@ function AppContent() {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value as 'de' | 'en')}
+              className="w-full px-4 py-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 outline-none"
+              aria-label={tr('Sprache auswählen', 'Select language')}
+            >
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+            </select>
             {navigation.map((item) => {
               const Icon = item.icon
               return (

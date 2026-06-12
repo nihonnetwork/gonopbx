@@ -1,8 +1,15 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 export type Language = 'de' | 'en'
 
-const DEFAULT_LANG = (import.meta.env.VITE_UI_LANG as Language) || 'de'
+const STORAGE_KEY = 'ui-language'
+const DEFAULT_LANG: Language = (import.meta.env.VITE_UI_LANG as Language) === 'de' ? 'de' : 'en'
+
+function getInitialLanguage(): Language {
+  const saved = localStorage.getItem(STORAGE_KEY)
+  if (saved === 'de' || saved === 'en') return saved
+  return DEFAULT_LANG
+}
 
 type I18nContextValue = {
   lang: Language
@@ -13,7 +20,11 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | undefined>(undefined)
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Language>(DEFAULT_LANG === 'en' ? 'en' : 'de')
+  const [lang, setLang] = useState<Language>(getInitialLanguage)
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, lang)
+  }, [lang])
 
   const value = useMemo<I18nContextValue>(() => ({
     lang,

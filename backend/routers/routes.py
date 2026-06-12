@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 import logging
 
-from database import get_db, InboundRoute, SIPTrunk, SIPPeer, RingGroup, IVRMenu, User, CallForward, VoicemailMailbox
+from database import get_db, InboundRoute, SIPTrunk, SIPPeer, RingGroup, IVRMenu, ConferenceRoom, User, CallForward, VoicemailMailbox
 from dialplan import write_extensions_config, reload_dialplan
 from auth import get_current_user
 from audit import log_action
@@ -54,7 +54,8 @@ def regenerate_dialplan(db: Session):
         all_trunks = db.query(SIPTrunk).all()
         all_groups = db.query(RingGroup).all()
         all_ivr = db.query(IVRMenu).all()
-        write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr)
+        all_conferences = db.query(ConferenceRoom).all()
+        write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr, all_conferences)
         reload_dialplan()
         logger.info(f"Dialplan regenerated with {len(all_routes)} inbound routes")
     except Exception as e:
@@ -89,7 +90,9 @@ def create_route(route: InboundRouteCreate, request: Request, current_user: User
     peer = db.query(SIPPeer).filter(SIPPeer.extension == route.destination_extension).first()
     group = db.query(RingGroup).filter(RingGroup.extension == route.destination_extension).first()
     ivr = db.query(IVRMenu).filter(IVRMenu.extension == route.destination_extension).first()
-    if not peer and not group and not ivr:
+    conf = db.query(ConferenceRoom).filter(ConferenceRoom.extension == route.destination_extension).first()
+    conf = db.query(ConferenceRoom).filter(ConferenceRoom.extension == route.destination_extension).first()
+    if not peer and not group and not ivr and not conf:
         raise HTTPException(status_code=400, detail="Destination extension not found")
 
     db_route = InboundRoute(**route.model_dump())
@@ -120,7 +123,9 @@ def update_route(route_id: int, route: InboundRouteUpdate, request: Request, cur
     peer = db.query(SIPPeer).filter(SIPPeer.extension == route.destination_extension).first()
     group = db.query(RingGroup).filter(RingGroup.extension == route.destination_extension).first()
     ivr = db.query(IVRMenu).filter(IVRMenu.extension == route.destination_extension).first()
-    if not peer and not group and not ivr:
+    conf = db.query(ConferenceRoom).filter(ConferenceRoom.extension == route.destination_extension).first()
+    conf = db.query(ConferenceRoom).filter(ConferenceRoom.extension == route.destination_extension).first()
+    if not peer and not group and not ivr and not conf:
         raise HTTPException(status_code=400, detail="Destination extension not found")
 
     for key, value in route.model_dump().items():

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, func
 from pydantic import BaseModel
-from database import Base, get_db, User, VoicemailMailbox, SIPPeer, SIPTrunk, RingGroup, IVRMenu
+from database import Base, get_db, User, VoicemailMailbox, SIPPeer, SIPTrunk, RingGroup, IVRMenu, ConferenceRoom
 from auth import get_current_user, JWT_SECRET, JWT_ALGORITHM
 from voicemail_config import write_voicemail_config, reload_voicemail
 from dialplan import write_extensions_config, reload_dialplan
@@ -79,7 +79,8 @@ async def update_mailbox(extension: str, data: MailboxUpdate, current_user: User
         all_trunks = db.query(SIPTrunk).all()
         all_groups = db.query(RingGroup).all()
         all_ivr = db.query(IVRMenu).all()
-        write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr)
+        all_conferences = db.query(ConferenceRoom).all()
+        write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr, all_conferences)
         reload_dialplan()
     except Exception as e:
         logger.error(f"Failed to regenerate dialplan after mailbox update: {e}")

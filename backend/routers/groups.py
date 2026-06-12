@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import logging
 
-from database import get_db, RingGroup, RingGroupMember, SIPPeer, IVRMenu, User, InboundRoute, CallForward, VoicemailMailbox, SIPTrunk
+from database import get_db, RingGroup, RingGroupMember, SIPPeer, IVRMenu, ConferenceRoom, User, InboundRoute, CallForward, VoicemailMailbox, SIPTrunk
 from auth import get_current_user
 from dialplan import write_extensions_config, reload_dialplan
 from queue_config import write_queues_config, reload_queues
@@ -123,8 +123,9 @@ def _regenerate_all(db: Session):
     all_trunks = db.query(SIPTrunk).all()
     all_groups = db.query(RingGroup).all()
     all_ivr = db.query(IVRMenu).all()
+    all_conferences = db.query(ConferenceRoom).all()
 
-    write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr)
+    write_extensions_config(all_routes, all_forwards, all_mailboxes, all_peers, all_trunks, all_groups, all_ivr, all_conferences)
     reload_dialplan()
     write_queues_config(all_groups)
     reload_queues()
@@ -161,6 +162,8 @@ def create_group(group: RingGroupCreate, request: Request, current_user: User = 
         raise HTTPException(status_code=400, detail="Gruppen-Nummer existiert bereits")
     if db.query(SIPPeer).filter(SIPPeer.extension == group.extension).first():
         raise HTTPException(status_code=400, detail="Gruppen-Nummer ist bereits als Nebenstelle vergeben")
+    if db.query(ConferenceRoom).filter(ConferenceRoom.extension == group.extension).first():
+        raise HTTPException(status_code=400, detail="Gruppen-Nummer ist bereits als Konferenz vergeben")
 
     _validate_strategy(group.strategy)
     if group.ring_time < 5 or group.ring_time > 120:
@@ -213,6 +216,8 @@ def update_group(group_id: int, group: RingGroupUpdate, request: Request, curren
             raise HTTPException(status_code=400, detail="Gruppen-Nummer existiert bereits")
         if db.query(SIPPeer).filter(SIPPeer.extension == group.extension).first():
             raise HTTPException(status_code=400, detail="Gruppen-Nummer ist bereits als Nebenstelle vergeben")
+        if db.query(ConferenceRoom).filter(ConferenceRoom.extension == group.extension).first():
+            raise HTTPException(status_code=400, detail="Gruppen-Nummer ist bereits als Konferenz vergeben")
 
     _validate_strategy(group.strategy)
     if group.ring_time < 5 or group.ring_time > 120:

@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 import os
 from ami_client import AsteriskAMIClient
 from database import engine, Base
-from routers import peers, trunks, routes, dashboard, cdr, voicemail, callforward, groups, ivr, contacts
+from routers import peers, trunks, routes, dashboard, cdr, voicemail, callforward, groups, ivr, contacts, conferences
 from routers import auth as auth_router, users as users_router
 from routers import settings as settings_router
 from routers import audit as audit_router
 from routers import sip_debug as sip_debug_router
 from auth import get_password_hash, get_current_user
-from database import SessionLocal, User, SIPPeer, VoicemailMailbox, SystemSettings
+from database import SessionLocal, User, SIPPeer, VoicemailMailbox, SystemSettings, ConferenceRoom
 from voicemail_config import write_voicemail_config, reload_voicemail
 from email_config import write_msmtp_config
 from mqtt_client import mqtt_publisher
@@ -285,7 +285,18 @@ async def lifespan(app: FastAPI):
             db.commit()
             logger.info(f"Created {created} voicemail mailboxes for existing peers")
 
-        # Load SMTP settings from DB
+        # Migrate: create conference_rooms table if missing
+    try:
+        from sqlalchemy import inspect as sa_inspect_conf
+        conf_inspector = sa_inspect_conf(engine)
+        tables = conf_inspector.get_table_names()
+        if 'conference_rooms' not in tables:
+            ConferenceRoom.__table__.create(bind=engine)
+            logger.info("Migration: created conference_rooms table")
+    except Exception as e:
+        logger.warning(f"Migration check for conference_rooms table: {e}")
+
+    # Load SMTP settings from DB
         smtp_settings = {}
         for key in ["smtp_host", "smtp_port", "smtp_tls", "smtp_user", "smtp_password", "smtp_from"]:
             s = db.query(SystemSettings).filter(SystemSettings.key == key).first()
@@ -389,6 +400,7 @@ app.include_router(voicemail.router, prefix="/api/voicemail", tags=["Voicemail"]
 app.include_router(callforward.router, prefix="/api/callforward", tags=["Call Forwarding"])
 app.include_router(groups.router, prefix="/api/groups", tags=["Ring Groups"])
 app.include_router(ivr.router, prefix="/api/ivr", tags=["IVR"])
+app.include_router(conferences.router, prefix="/api/conferences", tags=["Conference Rooms"])
 app.include_router(contacts.router, prefix="/api/contacts", tags=["Contacts"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(audit_router.router, prefix="/api/audit", tags=["Audit"])
