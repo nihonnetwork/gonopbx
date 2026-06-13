@@ -286,17 +286,17 @@ async def lifespan(app: FastAPI):
             logger.info(f"Created {created} voicemail mailboxes for existing peers")
 
         # Migrate: create conference_rooms table if missing
-    try:
-        from sqlalchemy import inspect as sa_inspect_conf
-        conf_inspector = sa_inspect_conf(engine)
-        tables = conf_inspector.get_table_names()
-        if 'conference_rooms' not in tables:
-            ConferenceRoom.__table__.create(bind=engine)
-            logger.info("Migration: created conference_rooms table")
-    except Exception as e:
-        logger.warning(f"Migration check for conference_rooms table: {e}")
+        try:
+            from sqlalchemy import inspect as sa_inspect_conf
+            conf_inspector = sa_inspect_conf(engine)
+            tables = conf_inspector.get_table_names()
+            if 'conference_rooms' not in tables:
+                ConferenceRoom.__table__.create(bind=engine)
+                logger.info("Migration: created conference_rooms table")
+        except Exception as e:
+            logger.warning(f"Migration check for conference_rooms table: {e}")
 
-    # Load SMTP settings from DB
+        # Load SMTP settings from DB
         smtp_settings = {}
         for key in ["smtp_host", "smtp_port", "smtp_tls", "smtp_user", "smtp_password", "smtp_from"]:
             s = db.query(SystemSettings).filter(SystemSettings.key == key).first()

@@ -160,6 +160,31 @@ class ApiService {
     })
   }
 
+  // Conference Rooms
+  async getConferenceRooms() {
+    return this.request<any[]>('/api/conferences/')
+  }
+
+  async createConferenceRoom(data: any) {
+    return this.request<any>('/api/conferences/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateConferenceRoom(id: number, data: any) {
+    return this.request<any>(`/api/conferences/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteConferenceRoom(id: number) {
+    return this.request<any>(`/api/conferences/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
   // IVR
   async getIvrMenus() {
     return this.request<any[]>('/api/ivr/')

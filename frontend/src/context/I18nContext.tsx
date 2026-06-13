@@ -3,12 +3,11 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 export type Language = 'de' | 'en'
 
 const STORAGE_KEY = 'ui-language'
-const DEFAULT_LANG: Language = (import.meta.env.VITE_UI_LANG as Language) === 'de' ? 'de' : 'en'
 
 function getInitialLanguage(): Language {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved === 'de' || saved === 'en') return saved
-  return DEFAULT_LANG
+  return 'en'
 }
 
 type I18nContextValue = {

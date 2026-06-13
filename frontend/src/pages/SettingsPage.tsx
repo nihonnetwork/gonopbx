@@ -6,6 +6,7 @@ import UsersPage from './UsersPage'
 import ExtensionsPage from './ExtensionsPage'
 import GroupsPage from './GroupsPage'
 import IvrPage from './IvrPage'
+import ConferenceRoomsPage from './ConferenceRoomsPage'
 import SIPDebugPage from './SIPDebugPage'
 
 interface AvailableCodec {
@@ -31,7 +32,7 @@ interface UpdateInfo {
   release_url: string
 }
 
-type SettingsTab = 'extensions' | 'groups' | 'ivr' | 'trunks' | 'users' | 'email' | 'audio' | 'security' | 'sip-debug' | 'audit' | 'homeassistant' | 'server'
+type SettingsTab = 'extensions' | 'groups' | 'ivr' | 'conferences' | 'trunks' | 'users' | 'email' | 'audio' | 'security' | 'sip-debug' | 'audit' | 'homeassistant' | 'server'
 
 export default function SettingsPage() {
   const { tr, lang } = useI18n()
@@ -39,6 +40,7 @@ export default function SettingsPage() {
     { id: 'extensions', label: tr('Nebenstellen', 'Extensions'), icon: Phone },
     { id: 'groups', label: tr('Gruppen', 'Groups'), icon: Users },
     { id: 'ivr', label: tr('IVR', 'IVR'), icon: Phone },
+    { id: 'conferences', label: tr('Konferenzen', 'Conferences'), icon: Users },
     { id: 'trunks', label: tr('Leitungen', 'Trunks'), icon: Server },
     { id: 'users', label: tr('Benutzer', 'Users'), icon: Users },
     { id: 'email', label: tr('E-Mail', 'Email'), icon: Mail },
@@ -458,6 +460,9 @@ export default function SettingsPage() {
 
       {/* IVR Tab */}
       {activeTab === 'ivr' && <IvrPage />}
+
+      {/* Conferences Tab */}
+      {activeTab === 'conferences' && <ConferenceRoomsPage />}
 
       {/* Trunks Tab */}
       {activeTab === 'trunks' && <ExtensionsPage mode="trunks" />}
