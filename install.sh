@@ -39,14 +39,31 @@ install_docker_on_debian() {
     run_root apt-get install -y ca-certificates curl gnupg
     run_root install -m 0755 -d /etc/apt/keyrings
     if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | run_root gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        curl -fsSL https://download.docker.com/linux/gpg | run_root gpg --dearmor -o /etc/apt/keyrings/docker.gpg
         run_root chmod a+r /etc/apt/keyrings/docker.gpg
     fi
 
-    if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
-        . /etc/os-release
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" | run_root tee /etc/apt/sources.list.d/docker.list >/dev/null
+    . /etc/os-release
+    DOCKER_DISTRO="${ID:-}"
+    case "$DOCKER_DISTRO" in
+        ubuntu)
+            DOCKER_CODENAME="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+            ;;
+        debian)
+            DOCKER_CODENAME="${VERSION_CODENAME:-}"
+            ;;
+        *)
+            error "Unsupported distribution for Docker installation: ${DOCKER_DISTRO:-unknown}"
+            exit 1
+            ;;
+    esac
+
+    if [ -z "$DOCKER_CODENAME" ]; then
+        error "Could not determine the distribution codename for Docker installation."
+        exit 1
     fi
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DISTRO} ${DOCKER_CODENAME} stable" | run_root tee /etc/apt/sources.list.d/docker.list >/dev/null
 
     run_root apt-get update
     run_root apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
