@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Phone, History, Menu, X, LogOut, Settings, HelpCircle, KeyRound, Moon, Sun, BookUser, Mic2 } from 'lucide-react'
+import { Phone, History, Menu, X, LogOut, Settings, HelpCircle, KeyRound, Moon, Sun, BookUser, Mic2, Route } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import ExtensionDetailPage from './pages/ExtensionDetailPage'
 import TrunkDetailPage from './pages/TrunkDetailPage'
@@ -9,12 +9,13 @@ import LoginPage from './pages/LoginPage'
 import SettingsPage from './pages/SettingsPage'
 import FAQPage from './pages/FAQPage'
 import ContactsPage from './pages/ContactsPage'
+import InboundRoutesPage from './pages/InboundRoutesPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { api } from './services/api'
 import { useI18n } from './context/I18nContext'
 
-type Page = 'dashboard' | 'extension-detail' | 'trunk-detail' | 'cdr' | 'recordings' | 'settings' | 'faq' | 'contacts'
+type Page = 'dashboard' | 'extension-detail' | 'trunk-detail' | 'cdr' | 'recordings' | 'routes' | 'settings' | 'faq' | 'contacts'
 
 function AppContent() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
@@ -94,6 +95,7 @@ function AppContent() {
   const navigation = [
     { id: 'dashboard' as Page, name: tr('Dashboard', 'Dashboard'), icon: Phone },
     { id: 'cdr' as Page, name: tr('Anrufverlauf', 'Call History'), icon: History },
+    { id: 'routes' as Page, name: tr('Inbound Routes', 'Inbound Routes'), icon: Route },
     { id: 'recordings' as Page, name: tr('Aufzeichnungen', 'Recordings'), icon: Mic2 },
     { id: 'contacts' as Page, name: tr('Telefonbuch', 'Contacts'), icon: BookUser },
     { id: 'faq' as Page, name: 'FAQ', icon: HelpCircle },
@@ -116,6 +118,8 @@ function AppContent() {
         return <CDRPage />
       case 'recordings':
         return <RecordingsPage />
+      case 'routes':
+        return <InboundRoutesPage />
       case 'contacts':
         return <ContactsPage />
       case 'faq':

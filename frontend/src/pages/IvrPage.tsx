@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Edit2, Trash2, Phone, Save } from 'lucide-react'
+import { Plus, Edit2, Trash2, Phone, Save, ArrowRight } from 'lucide-react'
 import { api } from '../services/api'
 import { useI18n } from '../context/I18nContext'
 
@@ -38,18 +38,6 @@ interface RingGroup {
   enabled: boolean
 }
 
-interface AvailableDidGroup {
-  trunk_id: number
-  trunk_name: string
-  dids: string[]
-}
-
-interface SIPTrunk {
-  id: number
-  name: string
-  enabled: boolean
-}
-
 const DIGITS = ['0','1','2','3','4','5','6','7','8','9','*','#']
 
 export default function IvrPage() {
@@ -57,8 +45,6 @@ export default function IvrPage() {
   const [menus, setMenus] = useState<IVRMenu[]>([])
   const [peers, setPeers] = useState<SIPPeer[]>([])
   const [groups, setGroups] = useState<RingGroup[]>([])
-  const [trunks, setTrunks] = useState<SIPTrunk[]>([])
-  const [availableDids, setAvailableDids] = useState<AvailableDidGroup[]>([])
   const [prompts, setPrompts] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -84,19 +70,15 @@ export default function IvrPage() {
 
   const fetchAll = async () => {
     try {
-      const [ivrData, peerData, groupData, trunkData, didData, promptData] = await Promise.all([
+      const [ivrData, peerData, groupData, promptData] = await Promise.all([
         api.getIvrMenus(),
         api.getSipPeers(),
         api.getRingGroups(),
-        api.getTrunks(),
-        api.getAvailableDids(),
         api.getIvrPrompts(),
       ])
       setMenus(ivrData)
       setPeers(peerData)
       setGroups(groupData)
-      setTrunks(trunkData)
-      setAvailableDids(didData)
       setPrompts(promptData)
       if (!testExtension) {
         const first = peerData.find((p: SIPPeer) => p.enabled)
@@ -164,35 +146,6 @@ export default function IvrPage() {
     })
     return opts.sort((a, b) => a.value.localeCompare(b.value))
   }, [peers, groups, menus, editing])
-
-  const trunkOptions = useMemo<AvailableDidGroup[]>(() => {
-    const options: AvailableDidGroup[] = trunks.filter(t => t.enabled).map(t => ({
-      trunk_id: t.id,
-      trunk_name: t.name,
-      dids: [],
-    }))
-    if (editing && editing.inbound_trunk_id) {
-      const exists = options.find(t => t.trunk_id === editing.inbound_trunk_id)
-      if (!exists) {
-        options.unshift({
-          trunk_id: editing.inbound_trunk_id,
-          trunk_name: tr(`Leitung ${editing.inbound_trunk_id}`, `Trunk ${editing.inbound_trunk_id}`),
-          dids: editing.inbound_did ? [editing.inbound_did] : [],
-        })
-      }
-    }
-    return options
-  }, [trunks, editing])
-
-  const didOptions = useMemo<string[]>(() => {
-    if (!form.inbound_trunk_id) return []
-    const trunk = availableDids.find(t => t.trunk_id === form.inbound_trunk_id)
-    const dids: string[] = trunk ? [...trunk.dids] : []
-    if (editing && editing.inbound_did && !dids.includes(editing.inbound_did)) {
-      dids.unshift(editing.inbound_did)
-    }
-    return dids
-  }, [form.inbound_trunk_id, availableDids, editing])
 
   const addOption = () => {
     setForm(prev => ({
@@ -466,76 +419,14 @@ export default function IvrPage() {
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{tr('Eingehende Rufnummer (optional)', 'Inbound number (optional)')}</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <select
-                      value={form.inbound_trunk_id ?? ''}
-                      onChange={e => {
-                        const nextId = e.target.value ? Number(e.target.value) : null
-                        setForm({ ...form, inbound_trunk_id: nextId, inbound_did: '' })
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">{tr('Leitung wählen', 'Select trunk')}</option>
-                      {trunkOptions.map(t => (
-                        <option key={t.trunk_id} value={t.trunk_id}>{t.trunk_name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={form.inbound_did}
-                      onChange={e => setForm({ ...form, inbound_did: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      disabled={!form.inbound_trunk_id}
-                    >
-                      <option value="">{tr('Rufnummer wählen', 'Select number')}</option>
-                      {didOptions.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
+                <div className="md:col-span-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-4 bg-gray-50 dark:bg-gray-700/30">
+                  <div className="flex items-start gap-3">
+                    <ArrowRight className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{tr('Inbound-Routen werden jetzt zentral verwaltet', 'Inbound routes are now managed centrally')}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{tr('Nutze die neue Inbound-Routes-Seite, um trunk + DID gezielt auf dieses IVR oder andere Ziele zu mappen.', 'Use the new Inbound Routes page to map trunk + DID to this IVR or other targets.')}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">{tr('Legt automatisch eine Inbound‑Route auf dieses IVR an.', 'Automatically creates an inbound route to this IVR.')}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{tr('Wiederholungen', 'Retries')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={5}
-                    value={form.retries}
-                    onChange={e => setForm({ ...form, retries: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{tr('Eingehende Rufnummer (optional)', 'Inbound number (optional)')}</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <select
-                      value={form.inbound_trunk_id ?? ''}
-                      onChange={e => {
-                        const nextId = e.target.value ? Number(e.target.value) : null
-                        setForm({ ...form, inbound_trunk_id: nextId, inbound_did: '' })
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">{tr('Leitung wählen', 'Select trunk')}</option>
-                      {trunkOptions.map(t => (
-                        <option key={t.trunk_id} value={t.trunk_id}>{t.trunk_name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={form.inbound_did}
-                      onChange={e => setForm({ ...form, inbound_did: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      disabled={!form.inbound_trunk_id}
-                    >
-                      <option value="">{tr('Rufnummer wählen', 'Select number')}</option>
-                      {didOptions.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">{tr('Legt automatisch eine Inbound‑Route auf dieses IVR an.', 'Automatically creates an inbound route to this IVR.')}</div>
                 </div>
               </div>
 
