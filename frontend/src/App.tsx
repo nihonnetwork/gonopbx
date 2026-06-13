@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { Phone, History, Menu, X, LogOut, Settings, HelpCircle, KeyRound, Moon, Sun, BookUser, Mic2, Route } from 'lucide-react'
+import { Phone, Menu, X, LogOut, KeyRound, Moon, Sun, Route, ChevronDown } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
+import ExtensionsPage from './pages/ExtensionsPage'
 import ExtensionDetailPage from './pages/ExtensionDetailPage'
 import TrunkDetailPage from './pages/TrunkDetailPage'
 import CDRPage from './pages/CDRPage'
 import RecordingsPage from './pages/RecordingsPage'
+import ConferenceRoomsPage from './pages/ConferenceRoomsPage'
+import GroupsPage from './pages/GroupsPage'
+import IvrPage from './pages/IvrPage'
 import LoginPage from './pages/LoginPage'
 import SettingsPage from './pages/SettingsPage'
 import FAQPage from './pages/FAQPage'
@@ -15,7 +19,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { api } from './services/api'
 import { useI18n } from './context/I18nContext'
 
-type Page = 'dashboard' | 'extension-detail' | 'trunk-detail' | 'cdr' | 'recordings' | 'routes' | 'settings' | 'faq' | 'contacts'
+type Page = 'dashboard' | 'extensions' | 'trunks' | 'ivr' | 'conferences' | 'groups' | 'cdr' | 'recordings' | 'routes' | 'settings' | 'faq' | 'contacts' | 'extension-detail' | 'trunk-detail'
 
 function AppContent() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
@@ -25,6 +29,7 @@ function AppContent() {
   const [selectedExtension, setSelectedExtension] = useState<string>('')
   const [selectedTrunkId, setSelectedTrunkId] = useState<number>(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [modulesOpen, setModulesOpen] = useState(false)
 
   // Password change modal
   const [showPwModal, setShowPwModal] = useState(false)
@@ -92,18 +97,14 @@ function AppContent() {
     return <LoginPage />
   }
 
-  const navigation = [
-    { id: 'dashboard' as Page, name: tr('Dashboard', 'Dashboard'), icon: Phone },
-    { id: 'cdr' as Page, name: tr('Anrufverlauf', 'Call History'), icon: History },
-    { id: 'routes' as Page, name: tr('Inbound Routes', 'Inbound Routes'), icon: Route },
-    { id: 'recordings' as Page, name: tr('Aufzeichnungen', 'Recordings'), icon: Mic2 },
-    { id: 'contacts' as Page, name: tr('Telefonbuch', 'Contacts'), icon: BookUser },
-    { id: 'faq' as Page, name: 'FAQ', icon: HelpCircle },
-    ...(user?.role === 'admin'
-      ? [
-          { id: 'settings' as Page, name: tr('Einstellungen', 'Settings'), icon: Settings },
-        ]
-      : []),
+  const moduleItems = [
+    { id: 'extensions' as Page, name: tr('Extensions', 'Extensions') },
+    { id: 'trunks' as Page, name: tr('Trunks', 'Trunks') },
+    { id: 'ivr' as Page, name: tr('IVR', 'IVR') },
+    { id: 'conferences' as Page, name: tr('Conferences', 'Conferences') },
+    { id: 'recordings' as Page, name: tr('Recordings', 'Recordings') },
+    { id: 'groups' as Page, name: tr('Groups', 'Groups') },
+    { id: 'cdr' as Page, name: tr('Call History', 'Call History') },
   ]
 
   const renderPage = () => {
@@ -114,6 +115,16 @@ function AppContent() {
         return <ExtensionDetailPage extension={selectedExtension} onBack={() => setCurrentPage('dashboard')} />
       case 'trunk-detail':
         return <TrunkDetailPage trunkId={selectedTrunkId} onBack={() => setCurrentPage('dashboard')} />
+      case 'extensions':
+        return <ExtensionsPage mode="peers" />
+      case 'trunks':
+        return <ExtensionsPage mode="trunks" />
+      case 'ivr':
+        return <IvrPage />
+      case 'conferences':
+        return <ConferenceRoomsPage />
+      case 'groups':
+        return <GroupsPage />
       case 'cdr':
         return <CDRPage />
       case 'recordings':
@@ -144,23 +155,52 @@ function AppContent() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">
-              {navigation.map((item) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentPage(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      currentPage === item.id
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.name}
-                  </button>
-                )
-              })}
+              <button
+                onClick={() => setCurrentPage('dashboard')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  currentPage === 'dashboard'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Phone className="w-5 h-5" />
+                {tr('Dashboard', 'Dashboard')}
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setModulesOpen(!modulesOpen)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    moduleItems.some((item) => item.id === currentPage)
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <Route className="w-5 h-5" />
+                  {tr('Modules', 'Modules')}
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+                {modulesOpen && (
+                  <div className="absolute left-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-2 z-50">
+                    {moduleItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setCurrentPage(item.id)
+                          setModulesOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                          currentPage === item.id
+                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Language selector */}
               <select
@@ -242,35 +282,52 @@ function AppContent() {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <button
+              onClick={() => { setCurrentPage('dashboard'); setMobileMenuOpen(false) }}
+              className={`flex items-center gap-3 w-full px-4 py-3 ${
+                currentPage === 'dashboard'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              <Phone className="w-5 h-5" />
+              {tr('Dashboard', 'Dashboard')}
+            </button>
+            <button
+              onClick={() => setModulesOpen(!modulesOpen)}
+              className="flex items-center justify-between gap-3 w-full px-4 py-3 text-gray-600 dark:text-gray-300 border-t border-gray-200 dark:border-gray-700"
+            >
+              <span className="flex items-center gap-3">
+                <Route className="w-5 h-5" />
+                {tr('Modules', 'Modules')}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${modulesOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {modulesOpen && moduleItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setCurrentPage(item.id)
+                  setMobileMenuOpen(false)
+                }}
+                className={`flex items-center gap-3 w-full px-8 py-3 ${
+                  currentPage === item.id
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {item.name}
+              </button>
+            ))}
             <select
               value={lang}
               onChange={(e) => setLang(e.target.value as 'de' | 'en')}
-              className="w-full px-4 py-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 outline-none"
+              className="w-full px-4 py-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 outline-none"
               aria-label={tr('Sprache auswählen', 'Select language')}
             >
               <option value="en">English</option>
               <option value="de">Deutsch</option>
             </select>
-            {navigation.map((item) => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setCurrentPage(item.id)
-                    setMobileMenuOpen(false)
-                  }}
-                  className={`flex items-center gap-3 w-full px-4 py-3 ${
-                    currentPage === item.id
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                      : 'text-gray-600 dark:text-gray-300'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.name}
-                </button>
-              )
-            })}
             <button
               onClick={() => { openPwModal(); setMobileMenuOpen(false) }}
               className="flex items-center gap-3 w-full px-4 py-3 text-gray-600 dark:text-gray-300 border-t border-gray-200 dark:border-gray-700"
