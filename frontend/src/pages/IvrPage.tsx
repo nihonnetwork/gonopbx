@@ -44,6 +44,12 @@ interface AvailableDidGroup {
   dids: string[]
 }
 
+interface SIPTrunk {
+  id: number
+  name: string
+  enabled: boolean
+}
+
 const DIGITS = ['0','1','2','3','4','5','6','7','8','9','*','#']
 
 export default function IvrPage() {
@@ -51,6 +57,7 @@ export default function IvrPage() {
   const [menus, setMenus] = useState<IVRMenu[]>([])
   const [peers, setPeers] = useState<SIPPeer[]>([])
   const [groups, setGroups] = useState<RingGroup[]>([])
+  const [trunks, setTrunks] = useState<SIPTrunk[]>([])
   const [availableDids, setAvailableDids] = useState<AvailableDidGroup[]>([])
   const [prompts, setPrompts] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,16 +84,18 @@ export default function IvrPage() {
 
   const fetchAll = async () => {
     try {
-      const [ivrData, peerData, groupData, didData, promptData] = await Promise.all([
+      const [ivrData, peerData, groupData, trunkData, didData, promptData] = await Promise.all([
         api.getIvrMenus(),
         api.getSipPeers(),
         api.getRingGroups(),
+        api.getTrunks(),
         api.getAvailableDids(),
         api.getIvrPrompts(),
       ])
       setMenus(ivrData)
       setPeers(peerData)
       setGroups(groupData)
+      setTrunks(trunkData)
       setAvailableDids(didData)
       setPrompts(promptData)
       if (!testExtension) {
@@ -156,8 +165,12 @@ export default function IvrPage() {
     return opts.sort((a, b) => a.value.localeCompare(b.value))
   }, [peers, groups, menus, editing])
 
-  const trunkOptions = useMemo(() => {
-    const options = [...availableDids]
+  const trunkOptions = useMemo<AvailableDidGroup[]>(() => {
+    const options: AvailableDidGroup[] = trunks.filter(t => t.enabled).map(t => ({
+      trunk_id: t.id,
+      trunk_name: t.name,
+      dids: [],
+    }))
     if (editing && editing.inbound_trunk_id) {
       const exists = options.find(t => t.trunk_id === editing.inbound_trunk_id)
       if (!exists) {
@@ -169,17 +182,17 @@ export default function IvrPage() {
       }
     }
     return options
-  }, [availableDids, editing])
+  }, [trunks, editing])
 
-  const didOptions = useMemo(() => {
+  const didOptions = useMemo<string[]>(() => {
     if (!form.inbound_trunk_id) return []
-    const trunk = trunkOptions.find(t => t.trunk_id === form.inbound_trunk_id)
-    const dids = trunk ? [...trunk.dids] : []
+    const trunk = availableDids.find(t => t.trunk_id === form.inbound_trunk_id)
+    const dids: string[] = trunk ? [...trunk.dids] : []
     if (editing && editing.inbound_did && !dids.includes(editing.inbound_did)) {
       dids.unshift(editing.inbound_did)
     }
     return dids
-  }, [form.inbound_trunk_id, trunkOptions, editing])
+  }, [form.inbound_trunk_id, availableDids, editing])
 
   const addOption = () => {
     setForm(prev => ({
