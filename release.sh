@@ -1,79 +1,59 @@
 #!/bin/bash
-#
-# GonoPBX Release Script
-# Erhöht die Patch-Version, aktualisiert die Dokumentation und erstellt Release Notes.
-#
-# Nutzung:
-#   ./release.sh "Beschreibung der Änderungen"
-#   ./release.sh "Rufumleitungen implementiert, DID-Anzeige im Dashboard"
-#
-
-set -e
+set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_JSON="$PROJECT_DIR/frontend/package.json"
-DOKU_FILE="$PROJECT_DIR/DOKUMENTATION.md"
+DOC_FILE="$PROJECT_DIR/DOKUMENTATION.md"
 RELEASES_DIR="$PROJECT_DIR/releases"
 
-# --- Argumente prüfen ---
-if [ -z "$1" ]; then
-    echo "Fehler: Bitte Release-Beschreibung angeben."
-    echo "Nutzung: ./release.sh \"Beschreibung der Änderungen\""
+if [ -z "${1:-}" ]; then
+    echo "ERROR: Please provide a release description."
+    echo "Usage: ./release.sh \"Description of changes\""
     exit 1
 fi
 
 RELEASE_NOTES_TEXT="$1"
-
-# --- Aktuelle Version lesen ---
 CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('$PACKAGE_JSON'))['version'])")
-echo "Aktuelle Version: $CURRENT_VERSION"
+echo "Current version: $CURRENT_VERSION"
 
-# --- Patch-Version hochzählen ---
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 NEW_PATCH=$((PATCH + 1))
 NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-echo "Neue Version:     $NEW_VERSION"
+echo "New version:     $NEW_VERSION"
 
-# --- package.json aktualisieren ---
 python3 -c "
 import json
-with open('$PACKAGE_JSON', 'r') as f:
+path = '$PACKAGE_JSON'
+with open(path, 'r') as f:
     data = json.load(f)
 data['version'] = '$NEW_VERSION'
-with open('$PACKAGE_JSON', 'w') as f:
+with open(path, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
 "
-echo "package.json aktualisiert."
+echo "package.json updated."
 
-# --- Datum ---
 TODAY=$(date +%d.%m.%Y)
-TODAY_ISO=$(date +%Y-%m-%d)
 
-# --- DOKUMENTATION.md Version und Stand aktualisieren ---
-sed -i "s/^\\*\\*Version:\\*\\* .*/\\*\\*Version:\\*\\* $NEW_VERSION/" "$DOKU_FILE"
-sed -i "s/^\\*\\*Stand:\\*\\* .*/\\*\\*Stand:\\*\\* $TODAY/" "$DOKU_FILE"
+sed -i "s/^\*\*Version:\*\* .*/\*\*Version:\*\* $NEW_VERSION/" "$DOC_FILE"
+sed -i "s/^\*\*Date:\*\* .*/\*\*Date:\*\* $TODAY/" "$DOC_FILE"
 
-# --- Changelog-Eintrag in DOKUMENTATION.md einfügen ---
-# Füge neuen Eintrag nach "## Changelog" ein
 CHANGELOG_ENTRY="### v$NEW_VERSION ($TODAY)\n- $RELEASE_NOTES_TEXT\n"
-sed -i "/^## Changelog$/a\\\\n$CHANGELOG_ENTRY" "$DOKU_FILE"
+sed -i "/^## Changelog$/a\\\n$CHANGELOG_ENTRY" "$DOC_FILE"
+echo "Documentation updated."
 
-echo "DOKUMENTATION.md aktualisiert."
-
-# --- Release Notes Datei erstellen ---
 mkdir -p "$RELEASES_DIR"
 RELEASE_FILE="$RELEASES_DIR/v${NEW_VERSION}.md"
 
 cat > "$RELEASE_FILE" << EOF
 # GonoPBX v${NEW_VERSION}
 
-**Datum:** ${TODAY}
-**Vorherige Version:** ${CURRENT_VERSION}
+**Date:** ${TODAY}
+**Previous version:** ${CURRENT_VERSION}
 
 ---
 
-## Änderungen
+## Changes
 
 ${RELEASE_NOTES_TEXT}
 
@@ -81,26 +61,25 @@ ${RELEASE_NOTES_TEXT}
 
 ## Deployment
 
-\`\`\`bash
-# Frontend neu bauen und deployen
+```bash
+# Rebuild and deploy the frontend
+
 docker compose build frontend && docker compose up -d frontend
 
-# Backend neustarten (falls Backend-Änderungen)
+# Restart the backend if needed
+
 docker restart pbx_backend
-\`\`\`
+```
 EOF
 
-echo "Release Notes erstellt: $RELEASE_FILE"
-
-# --- Zusammenfassung ---
+echo "Release notes created: $RELEASE_FILE"
 echo ""
 echo "==================================="
-echo " Release v$NEW_VERSION erstellt"
+echo " Release v$NEW_VERSION created"
 echo "==================================="
 echo "  package.json:      $NEW_VERSION"
-echo "  DOKUMENTATION.md:  aktualisiert"
-echo "  Release Notes:     $RELEASE_FILE"
+echo "  documentation:     updated"
+echo "  release notes:     $RELEASE_FILE"
 echo ""
-echo "Nächste Schritte:"
+echo "Next steps:"
 echo "  docker compose build frontend && docker compose up -d frontend"
-echo ""

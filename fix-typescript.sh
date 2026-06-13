@@ -1,15 +1,15 @@
 #!/bin/bash
+set -euo pipefail
 
-# Quick Fix für TypeScript-Fehler
+# Quick fix for TypeScript issues
 
-echo "🔧 Fixe TypeScript-Fehler..."
+echo "Fixing TypeScript issues..."
 
-# Fix useWebSocket.ts
 cat > frontend/src/hooks/useWebSocket.ts << 'EOF'
 import { useState, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 
-const WS_URL = typeof window !== 'undefined' 
+const WS_URL = typeof window !== 'undefined'
   ? `${window.location.protocol}//${window.location.hostname}:8000`
   : 'http://localhost:8000'
 
@@ -19,18 +19,17 @@ export function useWebSocket() {
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
-    // Connect to WebSocket
     socketRef.current = io(WS_URL, {
       transports: ['websocket', 'polling'],
     })
 
     socketRef.current.on('connect', () => {
-      console.log('✓ WebSocket connected')
+      console.log('WebSocket connected')
       setConnected(true)
     })
 
     socketRef.current.on('disconnect', () => {
-      console.log('✗ WebSocket disconnected')
+      console.log('WebSocket disconnected')
       setConnected(false)
     })
 
@@ -40,11 +39,10 @@ export function useWebSocket() {
     })
 
     socketRef.current.on('ami_event', (data: any) => {
-      console.log('AMI Event:', data)
+      console.log('AMI event:', data)
       setLastMessage(data)
     })
 
-    // Cleanup
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect()
@@ -60,7 +58,6 @@ export function useWebSocket() {
 }
 EOF
 
-# Fix api.ts
 cat > frontend/src/services/api.ts << 'EOF'
 const API_BASE_URL = typeof window !== 'undefined'
   ? `${window.location.protocol}//${window.location.hostname}:8000`
@@ -75,7 +72,7 @@ class ApiService {
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
-    
+
     try {
       const response = await fetch(url, {
         ...options,
@@ -86,22 +83,20 @@ class ApiService {
       })
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+        throw new Error(`API error: ${response.status} ${response.statusText}`)
       }
 
       return await response.json()
     } catch (error) {
-      console.error('API Request failed:', error)
+      console.error('API request failed:', error)
       throw error
     }
   }
 
-  // Health
   async getHealth() {
     return this.request<any>('/api/health')
   }
 
-  // Dashboard
   async getDashboardStatus() {
     return this.request<any>('/api/dashboard/status')
   }
@@ -114,7 +109,6 @@ class ApiService {
     return this.request<any>('/api/dashboard/registered-peers')
   }
 
-  // SIP Peers
   async getSipPeers() {
     return this.request<any[]>('/api/peers/')
   }
@@ -143,7 +137,6 @@ class ApiService {
     })
   }
 
-  // CDR
   async getCdr(limit: number = 50) {
     return this.request<any[]>(`/api/cdr/?limit=${limit}`)
   }
@@ -156,13 +149,11 @@ class ApiService {
 export const api = new ApiService(API_BASE_URL)
 EOF
 
-# Create vite-env.d.ts
 cat > frontend/src/vite-env.d.ts << 'EOF'
 /// <reference types="vite/client" />
 EOF
 
-echo "✓ TypeScript-Fehler behoben!"
-echo ""
-echo "Führe jetzt aus:"
+echo "TypeScript issues fixed."
+echo "Run:"
 echo "  docker compose build"
 echo "  docker compose up -d"

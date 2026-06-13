@@ -1,160 +1,218 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "============================================"
-echo "  GonoPBX Installer"
-echo "============================================"
-echo ""
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_DIR"
 
-# Check if user can run Docker (root or docker group)
-if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: Cannot connect to Docker."
-    echo "       Run as root or add your user to the docker group:"
-    echo "       sudo usermod -aG docker \$USER"
-    exit 1
-fi
+info() { printf '%s\n' "$*"; }
+warn() { printf 'WARNING: %s\n' "$*"; }
+error() { printf 'ERROR: %s\n' "$*"; }
 
-# Check prerequisites
-command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed."; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose is not available."; exit 1; }
-
-echo "[OK] Docker and Docker Compose found."
-echo ""
-
-# --- Check for existing installation ---
-FRESH_INSTALL=true
-
-if [ -f .env ]; then
-    echo "Bestehende Installation gefunden."
-    echo ""
-    echo "  [1] Update - Code aktualisieren, Daten und Passwoerter behalten"
-    echo "  [2] Neu    - Alles loeschen und komplett neu installieren"
-    echo ""
-    read -rp "Auswahl [1]: " INSTALL_MODE
-
-    if [ "$INSTALL_MODE" = "2" ]; then
-        echo ""
-        echo "ACHTUNG: Alle Daten (Nebenstellen, Trunks, Anrufverlauf) werden geloescht!"
-        read -rp "Wirklich alles loeschen? [j/N]: " CONFIRM_DELETE
-        if [ "$CONFIRM_DELETE" = "j" ] || [ "$CONFIRM_DELETE" = "J" ]; then
-            echo "Stoppe Container und loesche Daten..."
-            docker compose down -v 2>/dev/null || true
-            rm -f .env asterisk/config/manager.conf
-            echo "[OK] Alte Installation entfernt"
-            FRESH_INSTALL=true
+run_root() {
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        "$@"
+    else
+        if command -v sudo >/dev/null 2>&1; then
+            sudo "$@"
         else
-            echo "Abgebrochen."
+            error "This script needs root privileges or sudo."
+            exit 1
+        fi
+    fi
+}
+
+run_docker() {
+    if docker info >/dev/null 2>&1; then
+        docker "$@"
+    else
+        run_root docker "$@"
+    fi
+}
+
+run_compose() {
+    run_docker compose "$@"
+}
+
+install_docker_on_debian() {
+    info "Installing Docker and Docker Compose..."
+    run_root apt-get update
+    run_root apt-get install -y ca-certificates curl gnupg
+    run_root install -m 0755 -d /etc/apt/keyrings
+    if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | run_root gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        run_root chmod a+r /etc/apt/keyrings/docker.gpg
+    fi
+
+    if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
+        . /etc/os-release
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" | run_root tee /etc/apt/sources.list.d/docker.list >/dev/null
+    fi
+
+    run_root apt-get update
+    run_root apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+}
+
+ensure_docker() {
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "${ID:-}" in
+            ubuntu|debian)
+                install_docker_on_debian
+                ;;
+            *)
+                error "Automatic Docker installation is only implemented for Debian/Ubuntu systems."
+                exit 1
+                ;;
+        esac
+    else
+        error "Cannot determine the operating system. Install Docker and Docker Compose manually."
+        exit 1
+    fi
+
+    if ! docker compose version >/dev/null 2>&1; then
+        error "Docker Compose is still not available after installation."
+        exit 1
+    fi
+}
+
+wait_for_backend() {
+    info "Waiting for the backend to become healthy..."
+    for _ in $(seq 1 60); do
+        if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+            info "Backend is healthy."
+            return 0
+        fi
+        sleep 2
+    done
+    error "Backend did not become healthy in time."
+    exit 1
+}
+
+show_summary() {
+    local local_ip=""
+    local external_ip=""
+    local access_ip=""
+
+    local_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    external_ip="${EXTERNAL_IP:-}"
+    access_ip="${local_ip:-$external_ip}"
+
+    echo ""
+    echo "============================================"
+    echo "  GonoPBX Installation Complete!"
+    echo "============================================"
+    echo ""
+    echo "  Web GUI:    http://${access_ip}:3000"
+    echo "  API:        http://${access_ip}:8000"
+    if [ -n "${local_ip:-}" ] && [ -n "${external_ip:-}" ] && [ "$local_ip" != "$external_ip" ]; then
+        echo ""
+        echo "  Local network: http://${local_ip}:3000"
+        echo "  External:      http://${external_ip}:3000"
+        echo "                 (Port 3000 must be forwarded in your router)"
+    fi
+    echo ""
+    printf '  Login:      admin / %s\n' "$ADMIN_PASSWORD"
+    echo ""
+    echo "  Credentials are saved in .env"
+    echo "============================================"
+}
+
+configure_existing_installation() {
+    info "Existing installation found."
+    echo ""
+    echo "  [1] Update      - Refresh code, keep data and passwords"
+    echo "  [2] Reinstall   - Remove everything and start over"
+    echo ""
+    read -r -p "Choice [1]: " INSTALL_MODE
+    if [ "${INSTALL_MODE:-1}" = "2" ]; then
+        echo ""
+        warn "All data (extensions, trunks, call history) will be removed!"
+        read -r -p "Do you really want to delete everything? [y/N]: " CONFIRM_DELETE
+        if [ "${CONFIRM_DELETE:-n}" != "y" ] && [ "${CONFIRM_DELETE:-n}" != "Y" ]; then
+            info "Aborted."
             exit 0
         fi
+        info "Stopping containers and removing data..."
+        run_compose down -v >/dev/null 2>&1 || true
+        rm -f .env asterisk/config/manager.conf
+        info "Old installation removed."
     else
-        # --- Update mode ---
-        echo ""
-        echo "Aktualisiere GonoPBX..."
-
-        # Source existing env values
+        info "Updating GonoPBX..."
         # shellcheck disable=SC1091
         . ./.env
-
-        # Regenerate manager.conf with existing AMI password
         sed "s/%%AMI_PASSWORD%%/${AMI_PASSWORD}/" asterisk/config/manager.conf.template > asterisk/config/manager.conf
-        echo "[OK] manager.conf updated"
+        info "manager.conf updated."
+        info "Restarting containers..."
+        run_compose up -d --build
+        ./provision-defaults.sh
+        show_summary
+        return 0
+    fi
+}
 
-        # Ensure fail2ban paths exist
-        if [ ! -f /var/lib/fail2ban/fail2ban.sqlite3 ]; then
-            mkdir -p /var/lib/fail2ban
-            touch /var/lib/fail2ban/fail2ban.sqlite3
-        fi
-        if [ ! -S /var/run/fail2ban/fail2ban.sock ] && [ ! -e /var/run/fail2ban/fail2ban.sock ]; then
-            mkdir -p /var/run/fail2ban
-            touch /var/run/fail2ban/fail2ban.sock
-        fi
+ensure_docker
+info "[OK] Docker and Docker Compose are available."
 
-        echo ""
-        echo "Starte Container neu..."
-        docker pull docker:cli >/dev/null 2>&1 &
-        docker compose up -d --build
-
-        # Detect local LAN IP
-        LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-
-        echo ""
-        echo "============================================"
-        echo "  GonoPBX Update Complete!"
-        echo "============================================"
-        echo ""
-        if [ "$BIND_ADDRESS" = "0.0.0.0" ] && [ -n "$LOCAL_IP" ]; then
-            echo "  Web GUI:    http://${LOCAL_IP}:3000"
-        else
-            echo "  Web GUI:    http://localhost:3000"
-        fi
-        echo ""
-        echo "  Zugangsdaten unveraendert (siehe .env)"
-        echo "============================================"
+if [ -f .env ]; then
+    configure_existing_installation
+    if [ -f .env ]; then
+        # Update path already returned after summary.
         exit 0
     fi
 fi
 
-# --- Fresh installation ---
-
-# Detect external IP
-echo "Detecting external IP address..."
-DETECTED_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null || echo "")
-
+info "Detecting external IP address..."
+DETECTED_IP=$(curl -fsS --max-time 5 ifconfig.me 2>/dev/null || curl -fsS --max-time 5 icanhazip.com 2>/dev/null || true)
 if [ -n "$DETECTED_IP" ]; then
-    echo "Detected external IP: $DETECTED_IP"
-    read -rp "Use this IP? [Y/n]: " USE_DETECTED
-    if [ "$USE_DETECTED" = "n" ] || [ "$USE_DETECTED" = "N" ]; then
-        read -rp "Enter external IP: " EXTERNAL_IP
+    info "Detected external IP: $DETECTED_IP"
+    read -r -p "Use this IP? [Y/n]: " USE_DETECTED
+    if [ "${USE_DETECTED:-y}" = "n" ] || [ "${USE_DETECTED:-y}" = "N" ]; then
+        read -r -p "Enter external IP: " EXTERNAL_IP
     else
         EXTERNAL_IP="$DETECTED_IP"
     fi
 else
-    echo "Could not detect external IP automatically."
-    read -rp "Enter external IP: " EXTERNAL_IP
+    warn "Could not detect the external IP automatically."
+    read -r -p "Enter external IP: " EXTERNAL_IP
 fi
 
-# Detect local LAN IP
-LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-
-echo ""
-
-# Network mode
-echo "Nutzt du einen Reverse Proxy (z.B. Nginx) vor GonoPBX?"
-echo "  [1] Nein  - Direkter Zugriff aus dem Netzwerk (empfohlen fuer Heimnetz)"
-echo "  [2] Ja    - Zugriff nur ueber localhost/Reverse Proxy"
-read -rp "Auswahl [1]: " PROXY_CHOICE
-if [ "$PROXY_CHOICE" = "2" ]; then
+info ""
+info "Are you using a reverse proxy (for example Nginx) in front of GonoPBX?"
+info "  [1] No  - Direct network access (recommended for home or LAN use)"
+info "  [2] Yes - Access only through localhost / reverse proxy"
+read -r -p "Choice [1]: " PROXY_CHOICE
+if [ "${PROXY_CHOICE:-1}" = "2" ]; then
     BIND_ADDRESS="127.0.0.1"
-    echo "-> Bind: 127.0.0.1 (nur localhost)"
+    info "-> Bind address: 127.0.0.1 (localhost only)"
 else
     BIND_ADDRESS="0.0.0.0"
-    echo "-> Bind: 0.0.0.0 (Zugriff aus dem Netzwerk)"
+    info "-> Bind address: 0.0.0.0 (network access)"
 fi
 
-# Language selection
-echo ""
-echo "Sprache der Weboberflaeche / UI language"
-echo "  [1] Deutsch"
-echo "  [2] English"
-read -rp "Auswahl [1]: " UI_LANG_CHOICE
-if [ "$UI_LANG_CHOICE" = "2" ]; then
+info ""
+info "Web interface language"
+info "  [1] German"
+info "  [2] English"
+read -r -p "Choice [1]: " UI_LANG_CHOICE
+if [ "${UI_LANG_CHOICE:-1}" = "2" ]; then
     UI_LANG="en"
 else
     UI_LANG="de"
 fi
 
-# SIP port
-echo ""
-echo "SIP-Port fuer Asterisk (Standard: 5060)"
-echo "Aendern falls dein Router ein SIP-ALG hat (z.B. FritzBox)"
-read -rp "SIP-Port [5060]: " SIP_PORT
+info ""
+info "SIP port for Asterisk (default: 5060)"
+info "Change this if your router has SIP ALG enabled."
+read -r -p "SIP port [5060]: " SIP_PORT
 SIP_PORT="${SIP_PORT:-5060}"
-echo "-> SIP-Port: $SIP_PORT"
+info "-> SIP port: $SIP_PORT"
 
-echo ""
-
-# Admin password
-printf "Set admin password (leave empty to auto-generate): "
+info ""
+printf 'Set admin password (leave empty to auto-generate): '
 IFS= read -r ADMIN_PASSWORD
 if [ -z "$ADMIN_PASSWORD" ]; then
     ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 20)
@@ -163,26 +221,24 @@ else
     printf 'Password set: %s\n' "$ADMIN_PASSWORD"
 fi
 
-# Generate secure random passwords
 JWT_SECRET=$(openssl rand -base64 48 | tr -d '/+=')
 DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
 AMI_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
 
-# Home Assistant integration (optional)
-echo ""
-echo "Home Assistant Integration (optional)"
-read -rp "Generate API key for Home Assistant? [y/N]: " HA_CHOICE
-if [ "$HA_CHOICE" = "y" ] || [ "$HA_CHOICE" = "Y" ]; then
+info ""
+info "Home Assistant integration (optional)"
+read -r -p "Generate API key for Home Assistant? [y/N]: " HA_CHOICE
+if [ "${HA_CHOICE:-n}" = "y" ] || [ "${HA_CHOICE:-n}" = "Y" ]; then
     HA_API_KEY=$(openssl rand -hex 32)
-    printf 'Generated HA API Key: %s\n' "$HA_API_KEY"
+    printf 'Generated HA API key: %s\n' "$HA_API_KEY"
     echo ""
-    read -rp "MQTT broker address (leave empty to skip): " MQTT_BROKER
-    if [ -n "$MQTT_BROKER" ]; then
-        read -rp "MQTT port [1883]: " MQTT_PORT
+    read -r -p "MQTT broker address (leave empty to skip): " MQTT_BROKER
+    if [ -n "${MQTT_BROKER:-}" ]; then
+        read -r -p "MQTT port [1883]: " MQTT_PORT
         MQTT_PORT="${MQTT_PORT:-1883}"
-        read -rp "MQTT user (leave empty if none): " MQTT_USER
-        if [ -n "$MQTT_USER" ]; then
-            printf "MQTT password: "
+        read -r -p "MQTT user (leave empty if none): " MQTT_USER
+        if [ -n "${MQTT_USER:-}" ]; then
+            printf 'MQTT password: '
             IFS= read -r MQTT_PASSWORD
         fi
     fi
@@ -191,14 +247,11 @@ else
     MQTT_BROKER=""
 fi
 
-echo ""
-echo "Generating configuration..."
-
-# Create .env file
+info ""
+info "Generating configuration..."
 cat > .env <<'ENVEOF'
 # GonoPBX Configuration - generated by install.sh
 ENVEOF
-# Write values without quotes (Docker Compose v2 treats quotes as literal)
 {
     printf 'EXTERNAL_IP=%s\n' "$EXTERNAL_IP"
     printf 'ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD"
@@ -207,81 +260,31 @@ ENVEOF
     printf 'AMI_PASSWORD=%s\n' "$AMI_PASSWORD"
     printf 'BIND_ADDRESS=%s\n' "$BIND_ADDRESS"
     printf 'SIP_PORT=%s\n' "$SIP_PORT"
-    printf 'PROJECT_DIR=%s\n' "$(pwd)"
-    printf 'UI_LANG=%s\n' "${UI_LANG}"
+    printf 'PROJECT_DIR=%s\n' "$PROJECT_DIR"
+    printf 'UI_LANG=%s\n' "$UI_LANG"
     printf 'HA_API_KEY=%s\n' "${HA_API_KEY:-}"
     printf 'MQTT_BROKER=%s\n' "${MQTT_BROKER:-}"
     printf 'MQTT_PORT=%s\n' "${MQTT_PORT:-1883}"
     printf 'MQTT_USER=%s\n' "${MQTT_USER:-}"
     printf 'MQTT_PASSWORD=%s\n' "${MQTT_PASSWORD:-}"
 } >> .env
+info "[OK] .env created"
 
-echo "[OK] .env created"
-
-# Write manager.conf from template with generated AMI password
 sed "s/%%AMI_PASSWORD%%/${AMI_PASSWORD}/" asterisk/config/manager.conf.template > asterisk/config/manager.conf
+info "[OK] manager.conf updated"
 
-echo "[OK] manager.conf updated"
-
-# Ensure fail2ban paths exist (GonoPBX reads them read-only if available)
 if [ ! -f /var/lib/fail2ban/fail2ban.sqlite3 ]; then
-    mkdir -p /var/lib/fail2ban
-    touch /var/lib/fail2ban/fail2ban.sqlite3
-    echo "[OK] Created empty fail2ban database placeholder"
+    run_root mkdir -p /var/lib/fail2ban
+    run_root touch /var/lib/fail2ban/fail2ban.sqlite3
+    info "[OK] Created fail2ban database placeholder"
 fi
 if [ ! -S /var/run/fail2ban/fail2ban.sock ] && [ ! -e /var/run/fail2ban/fail2ban.sock ]; then
-    mkdir -p /var/run/fail2ban
-    touch /var/run/fail2ban/fail2ban.sock
-    echo "[OK] Created fail2ban socket placeholder"
+    run_root mkdir -p /var/run/fail2ban
+    run_root touch /var/run/fail2ban/fail2ban.sock
+    info "[OK] Created fail2ban socket placeholder"
 fi
 
-# Pre-pull helper image for web-based updates
-echo ""
-echo "Preparing update system..."
-docker pull docker:cli >/dev/null 2>&1 &
-
-# Start containers
-echo ""
-echo "Starting containers..."
-docker compose up -d --build
-
-# Send anonymous install telemetry (non-blocking, no personal data)
-INSTALL_OS=$(. /etc/os-release 2>/dev/null && echo "$ID $VERSION_ID" || echo "unknown")
-INSTALL_ARCH=$(uname -m)
-INSTALL_VERSION=$(grep '^VERSION' backend/version.py 2>/dev/null | cut -d'"' -f2 || echo "unknown")
-INSTALL_LOCALE="de-DE"
-if [ "$UI_LANG" = "en" ]; then
-    INSTALL_LOCALE="en-US"
-fi
-curl -s -o /dev/null --max-time 5 \
-  -X POST "https://analytics.gonopbx.de/api/send" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: GonoPBX-Installer/${INSTALL_VERSION}" \
-  -d "{\"type\":\"event\",\"payload\":{\"hostname\":\"gonopbx.de\",\"language\":\"${INSTALL_LOCALE}\",\"referrer\":\"\",\"screen\":\"1920x1080\",\"title\":\"install\",\"url\":\"/install\",\"website\":\"cc8fa162-1aef-4c89-8e13-4fdbfa9bc6f7\",\"name\":\"install\",\"data\":{\"os\":\"${INSTALL_OS}\",\"arch\":\"${INSTALL_ARCH}\",\"version\":\"${INSTALL_VERSION}\"}}}" \
-  2>/dev/null || true
-
-echo ""
-echo "============================================"
-echo "  GonoPBX Installation Complete!"
-echo "============================================"
-echo ""
-if [ "$BIND_ADDRESS" = "0.0.0.0" ]; then
-    ACCESS_IP="${LOCAL_IP:-$EXTERNAL_IP}"
-    echo "  Web GUI:    http://${ACCESS_IP}:3000"
-    echo "  API:        http://${ACCESS_IP}:8000"
-    if [ -n "$LOCAL_IP" ] && [ "$LOCAL_IP" != "$EXTERNAL_IP" ]; then
-        echo ""
-        echo "  Lokales Netzwerk: http://${LOCAL_IP}:3000"
-        echo "  Extern:           http://${EXTERNAL_IP}:3000"
-        echo "                     (Port 3000 muss im Router freigegeben sein)"
-    fi
-else
-    echo "  Web GUI:    http://localhost:3000"
-    echo "  API:        http://localhost:8000"
-    echo "  (Reverse Proxy noetig fuer externen Zugriff)"
-fi
-echo ""
-printf '  Login:      admin / %s\n' "$ADMIN_PASSWORD"
-echo ""
-echo "  Credentials are saved in .env"
-echo "============================================"
+info "Starting containers..."
+run_compose up -d --build
+./provision-defaults.sh
+show_summary
