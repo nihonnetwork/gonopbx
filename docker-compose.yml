@@ -11,6 +11,7 @@ services:
     volumes:
       - ./asterisk/config:/etc/asterisk/custom
       - asterisk_voicemail:/var/spool/asterisk/voicemail
+      - asterisk_recordings:/var/spool/asterisk/monitor
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 30s
@@ -38,6 +39,7 @@ services:
       - ASTERISK_USER=admin
       - ASTERISK_PASSWORD=${AMI_PASSWORD}
       - HA_API_KEY=${HA_API_KEY:-}
+      - ASTERISK_RECORDINGS_DIR=/var/spool/asterisk/monitor
       - MQTT_BROKER=${MQTT_BROKER:-}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-}
@@ -47,6 +49,7 @@ services:
       - ./backend:/app
       - user_uploads:/app/uploads
       - asterisk_voicemail:/var/spool/asterisk/voicemail
+      - asterisk_recordings:/var/spool/asterisk/monitor
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECT_DIR:-.}:/project
       - /var/lib/fail2ban/fail2ban.sqlite3:/var/lib/fail2ban/fail2ban.sqlite3:ro
@@ -95,6 +98,7 @@ services:
 volumes:
   postgres_data:
   asterisk_voicemail:
+  asterisk_recordings:
   user_uploads:
 
 networks:

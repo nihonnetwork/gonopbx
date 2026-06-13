@@ -370,6 +370,30 @@ class ApiService {
     return this.request<any>('/api/cdr/stats')
   }
 
+  // Recordings
+  async getRecordings(params?: string) {
+    return this.request<any[]>(`/api/recordings/?${params || 'limit=50'}`)
+  }
+
+  async getRecording(id: number) {
+    return this.request<any>(`/api/recordings/${id}`)
+  }
+
+  async fetchRecordingBlob(id: number, mode: 'play' | 'download' = 'play') {
+    const url = `${this.baseUrl}/api/recordings/${id}/${mode}`
+    const response = await fetch(url, { headers: { ...this.getAuthHeaders() } })
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      window.location.reload()
+      throw new Error('Sitzung abgelaufen')
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || `API Error: ${response.status} ${response.statusText}`)
+    }
+    return await response.blob()
+  }
+
   // Voicemail Mailbox Config
   async getVoicemailMailbox(extension: string) {
     return this.request<any>(`/api/voicemail/mailbox/${extension}`)

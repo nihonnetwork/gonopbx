@@ -247,6 +247,24 @@ class CDR(Base):
     userfield = Column(String(255))
 
 
+class CallRecording(Base):
+    __tablename__ = "call_recordings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cdr_id = Column(Integer, ForeignKey("cdr.id"), nullable=True, index=True)
+    uniqueid = Column(String(150), unique=True, nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    mime_type = Column(String(100), default="audio/wav")
+    duration = Column(Integer, nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    src = Column(String(80), nullable=True)
+    dst = Column(String(80), nullable=True)
+    disposition = Column(String(45), nullable=True)
+    call_date = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class VoicemailMailbox(Base):
     __tablename__ = "voicemail_mailboxes"
 

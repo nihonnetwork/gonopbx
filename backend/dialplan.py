@@ -11,6 +11,7 @@ from database import InboundRoute, CallForward, VoicemailMailbox, SIPPeer, SIPTr
 logger = logging.getLogger(__name__)
 
 EXTENSIONS_CONFIG_PATH = "/etc/asterisk/custom/extensions.conf"
+RECORDINGS_DIR = os.getenv("ASTERISK_RECORDINGS_DIR", "/var/spool/asterisk/monitor")
 
 
 def _build_forward_map(forwards: List[CallForward]) -> dict:
@@ -41,6 +42,7 @@ def _generate_dial_logic(extension: str, fwd_map: dict, ring_time: int = 30, ear
         if early_answer:
             lines.append(f' same => n,Answer()')
             lines.append(f' same => n,Wait(0.5)')
+        lines.append(_generate_recording_logic())
         lines.append(f' same => n,Dial(PJSIP/{cfu.destination}@trunk,{ring_time},tT)')
         lines.append(f' same => n,Hangup()')
         return "\n".join(lines)
@@ -55,15 +57,20 @@ def _generate_dial_logic(extension: str, fwd_map: dict, ring_time: int = 30, ear
     lines.append(f' same => n,Set(DEVICE_STATE=${{DEVICE_STATE(PJSIP/{extension})}})')
     lines.append(f' same => n,GotoIf($["${{DEVICE_STATE}}" = "UNAVAILABLE"]?unavail)')
     lines.append(f' same => n,GotoIf($["${{DEVICE_STATE}}" = "INVALID"]?unavail)')
+    lines.append(_generate_recording_logic())
     lines.append(f' same => n,Dial(PJSIP/{extension},{actual_ring},tTr)')
 
     if cfb and cfna:
         lines.append(f' same => n,GotoIf($["${{DIALSTATUS}}" = "BUSY"]?busy:noanswer)')
         lines.append(f' same => n(noanswer),NoOp(CFNA: forwarding to {cfna.destination})')
+        lines.append(_generate_recording_logic())
+        lines.append(_generate_recording_logic())
         lines.append(f' same => n,Dial(PJSIP/{cfna.destination}@trunk,30,tT)')
         lines.append(f' same => n,VoiceMail({extension}@default,u)')
         lines.append(f' same => n,Hangup()')
         lines.append(f' same => n(busy),NoOp(CFB: forwarding to {cfb.destination})')
+        lines.append(_generate_recording_logic())
+        lines.append(_generate_recording_logic())
         lines.append(f' same => n,Dial(PJSIP/{cfb.destination}@trunk,30,tT)')
         lines.append(f' same => n,VoiceMail({extension}@default,b)')
         lines.append(f' same => n,Hangup()')
@@ -72,12 +79,14 @@ def _generate_dial_logic(extension: str, fwd_map: dict, ring_time: int = 30, ear
         lines.append(f' same => n(unavail),VoiceMail({extension}@default,u)')
         lines.append(f' same => n,Hangup()')
         lines.append(f' same => n(busy),NoOp(CFB: forwarding to {cfb.destination})')
+        lines.append(_generate_recording_logic())
         lines.append(f' same => n,Dial(PJSIP/{cfb.destination}@trunk,30,tT)')
         lines.append(f' same => n,VoiceMail({extension}@default,b)')
         lines.append(f' same => n,Hangup()')
     elif cfna:
         lines.append(f' same => n,GotoIf($["${{DIALSTATUS}}" = "BUSY"]?busy:noanswer)')
         lines.append(f' same => n(noanswer),NoOp(CFNA: forwarding to {cfna.destination})')
+        lines.append(_generate_recording_logic())
         lines.append(f' same => n,Dial(PJSIP/{cfna.destination}@trunk,30,tT)')
         lines.append(f' same => n,VoiceMail({extension}@default,u)')
         lines.append(f' same => n,Hangup()')
@@ -133,11 +142,21 @@ def _build_ring_timeout_map(mailboxes: List[VoicemailMailbox]) -> dict:
     return {mb.extension: (mb.ring_timeout or 20) for mb in mailboxes}
 
 
+def _generate_recording_logic() -> str:
+    """Generate MixMonitor setup for call recordings."""
+    lines = []
+    lines.append(f' same => n,Set(RECORDING_FILE={RECORDINGS_DIR}/${{LINKEDID}}.wav)')
+    lines.append(' same => n,NoOp(Recording call to ${RECORDING_FILE})')
+    lines.append(' same => n,MixMonitor(${RECORDING_FILE},b)')
+    return "\n".join(lines)
+
+
 def _generate_ring_group_logic(group: RingGroup) -> str:
     """Generate dial logic for a ring group (queue)."""
     queue_name = f"rg_{group.id}"
     ring_time = group.ring_time or 20
     lines = []
+    lines.append(_generate_recording_logic())
     lines.append(f" same => n,Queue({queue_name},tT,,,{ring_time})")
     lines.append(" same => n,Hangup()")
     return "\n".join(lines)
@@ -147,6 +166,7 @@ def _generate_conference_logic(room: ConferenceRoom) -> str:
     lines = []
     lines.append(' same => n,Answer()')
     lines.append(' same => n,Wait(0.5)')
+    lines.append(_generate_recording_logic())
     if getattr(room, 'pin', None) or getattr(room, 'admin_pin', None):
         lines.append(' same => n,Read(CONF_PIN,confbridge-pin,12,,3,10)')
         if getattr(room, 'admin_pin', None):
@@ -324,6 +344,7 @@ clearglobalvars=no
                 if pai:
                     pai_domain = trunk.sip_server if trunk else "localhost"
                     config += f" same => n,Set(PJSIP_HEADER(add,P-Asserted-Identity)=<sip:{pai}@{pai_domain}>)\n"
+            config += _generate_recording_logic() + "\n"
             config += f" same => n,Dial(PJSIP/${{EXTEN}}@trunk-ep-{tid},120,tT)\n"
             config += f" same => n,Hangup()\n"
         config += "\n"
@@ -350,6 +371,7 @@ clearglobalvars=no
                 if pai:
                     pai_domain = trunk.sip_server if trunk else "localhost"
                     config += f" same => n,Set(PJSIP_HEADER(add,P-Asserted-Identity)=<sip:{pai}@{pai_domain}>)\n"
+            config += _generate_recording_logic() + "\n"
             config += f" same => n,Dial(PJSIP/${{EXTEN}}@trunk-ep-{tid},120,tT)\n"
             config += f" same => n,Hangup()\n"
         config += "\n"

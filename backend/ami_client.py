@@ -12,8 +12,10 @@ from panoramisk import Manager
 logger = logging.getLogger(__name__)
 
 # Database import for CDR
-from database import SessionLocal, CDR
+from database import SessionLocal, CDR, CallRecording
 from mqtt_client import mqtt_publisher
+
+RECORDINGS_DIR = os.getenv("ASTERISK_RECORDINGS_DIR", "/var/spool/asterisk/monitor")
 
 
 class AsteriskAMIClient:
@@ -181,9 +183,10 @@ class AsteriskAMIClient:
             else:
                 disposition = call['state'].upper()
             
-            # Save CDR to database
+            # Save CDR and recording metadata to database
             try:
-                await self.save_cdr(call, duration, billsec, disposition, linkedid)
+                cdr_id = await self.save_cdr(call, duration, billsec, disposition, linkedid)
+                await self.save_recording(call, duration, disposition, linkedid, cdr_id)
                 logger.info(f"💾 CDR saved: {call['caller']} -> {call['destination']} ({duration}s, {disposition})")
             except Exception as e:
                 logger.error(f"Failed to save CDR: {e}")
@@ -217,9 +220,64 @@ class AsteriskAMIClient:
             )
             db.add(cdr)
             db.commit()
+            db.refresh(cdr)
+            return cdr.id
         except Exception as e:
             db.rollback()
             raise e
+        finally:
+            db.close()
+
+    async def save_recording(self, call: dict, duration: int, disposition: str, uniqueid: str, cdr_id: int | None):
+        """Save recording metadata if the audio file exists"""
+        import asyncio
+        from pathlib import Path
+
+        recording_path = Path(RECORDINGS_DIR) / f"{uniqueid}.wav"
+        db = SessionLocal()
+        try:
+            for _ in range(5):
+                if recording_path.exists():
+                    break
+                await asyncio.sleep(0.2)
+
+            if not recording_path.exists():
+                logger.info(f"Recording file not found for {uniqueid}: {recording_path}")
+                return None
+
+            size_bytes = recording_path.stat().st_size
+            recording = db.query(CallRecording).filter(CallRecording.uniqueid == uniqueid).first()
+            if recording:
+                recording.cdr_id = cdr_id
+                recording.filename = recording_path.name
+                recording.file_path = str(recording_path)
+                recording.mime_type = 'audio/wav'
+                recording.duration = duration
+                recording.size_bytes = size_bytes
+                recording.src = call.get('caller', '')
+                recording.dst = call.get('destination', '')
+                recording.disposition = disposition
+                recording.call_date = call.get('start_time', datetime.utcnow())
+            else:
+                db.add(CallRecording(
+                    cdr_id=cdr_id,
+                    uniqueid=uniqueid,
+                    filename=recording_path.name,
+                    file_path=str(recording_path),
+                    mime_type='audio/wav',
+                    duration=duration,
+                    size_bytes=size_bytes,
+                    src=call.get('caller', ''),
+                    dst=call.get('destination', ''),
+                    disposition=disposition,
+                    call_date=call.get('start_time', datetime.utcnow()),
+                ))
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to save recording metadata: {e}")
+            return False
         finally:
             db.close()
 

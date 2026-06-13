@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 import os
 from ami_client import AsteriskAMIClient
 from database import engine, Base
-from routers import peers, trunks, routes, dashboard, cdr, voicemail, callforward, groups, ivr, contacts, conferences
+from routers import peers, trunks, routes, dashboard, cdr, voicemail, callforward, groups, ivr, contacts, conferences, recordings
 from routers import auth as auth_router, users as users_router
 from routers import settings as settings_router
 from routers import audit as audit_router
@@ -396,6 +396,7 @@ app.include_router(trunks.router, prefix="/api/trunks", tags=["SIP Trunks"])
 app.include_router(routes.router, prefix="/api/routes", tags=["Inbound Routes"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(cdr.router, prefix="/api/cdr", tags=["Call Records"])
+app.include_router(recordings.router, prefix="/api/recordings", tags=["Call Recordings"])
 app.include_router(voicemail.router, prefix="/api/voicemail", tags=["Voicemail"])
 app.include_router(callforward.router, prefix="/api/callforward", tags=["Call Forwarding"])
 app.include_router(groups.router, prefix="/api/groups", tags=["Ring Groups"])
