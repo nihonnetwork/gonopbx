@@ -104,6 +104,7 @@ function AppContent() {
     { id: 'conferences' as Page, name: tr('Conferences', 'Conferences') },
     { id: 'recordings' as Page, name: tr('Recordings', 'Recordings') },
     { id: 'groups' as Page, name: tr('Groups', 'Groups') },
+    { id: 'routes' as Page, name: tr('Inbound Routes', 'Inbound Routes') },
     { id: 'cdr' as Page, name: tr('Call History', 'Call History') },
   ]
 
@@ -201,6 +202,41 @@ function AppContent() {
                   </div>
                 )}
               </div>
+
+              <button
+                onClick={() => setCurrentPage('contacts')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  currentPage === 'contacts'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                {tr('Contacts', 'Contacts')}
+              </button>
+
+              <button
+                onClick={() => setCurrentPage('faq')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  currentPage === 'faq'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                {tr('FAQ', 'FAQ')}
+              </button>
+
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => setCurrentPage('settings')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    currentPage === 'settings'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {tr('Settings', 'Settings')}
+                </button>
+              )}
 
               {/* Language selector */}
               <select
@@ -319,6 +355,38 @@ function AppContent() {
                 {item.name}
               </button>
             ))}
+            <button
+              onClick={() => { setCurrentPage('contacts'); setMobileMenuOpen(false) }}
+              className={`flex items-center gap-3 w-full px-4 py-3 border-t border-gray-200 dark:border-gray-700 ${
+                currentPage === 'contacts'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              {tr('Contacts', 'Contacts')}
+            </button>
+            <button
+              onClick={() => { setCurrentPage('faq'); setMobileMenuOpen(false) }}
+              className={`flex items-center gap-3 w-full px-4 py-3 border-t border-gray-200 dark:border-gray-700 ${
+                currentPage === 'faq'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              {tr('FAQ', 'FAQ')}
+            </button>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => { setCurrentPage('settings'); setMobileMenuOpen(false) }}
+                className={`flex items-center gap-3 w-full px-4 py-3 border-t border-gray-200 dark:border-gray-700 ${
+                  currentPage === 'settings'
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {tr('Settings', 'Settings')}
+              </button>
+            )}
             <select
               value={lang}
               onChange={(e) => setLang(e.target.value as 'de' | 'en')}
