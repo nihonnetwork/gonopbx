@@ -210,28 +210,44 @@ def delete_trunk(trunk_id: int, request: Request, current_user: User = Depends(g
 
 
 def expand_number_block(number_block: str) -> list[str]:
-    """Expand a number block like '042198977990-9' into individual DIDs.
-    Format: {base_number}-{end_digit}
-    The last digit of base_number is the start, end_digit is the end.
+    """Expand a trunk DID definition into individual DIDs.
+
+    Supported formats:
+    - single DID: +492211234567
+    - comma-separated list: +492211234567,+492211234568
+    - range suffix: +492211234560-9 -> +492211234560 ... +492211234569
+    - extended range suffix: +4922112345600-99 -> +4922112345600 ... +4922112345699
     """
-    if not number_block or '-' not in number_block:
+    if not number_block:
         return []
-    parts = number_block.rsplit('-', 1)
-    if len(parts) != 2:
-        return []
-    base = parts[0]
-    end_str = parts[1].strip()
-    if not base or not end_str.isdigit():
-        return []
-    prefix = base[:-1]
-    start_digit = base[-1]
-    if not start_digit.isdigit():
-        return []
-    start = int(start_digit)
-    end = int(end_str)
-    if end < start:
-        return []
-    return [f"{prefix}{d}" for d in range(start, end + 1)]
+
+    dids: list[str] = []
+    for raw_part in number_block.split(','):
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        if '-' not in part:
+            dids.append(part)
+            continue
+
+        base, end_str = part.rsplit('-', 1)
+        if not base or not end_str.isdigit():
+            continue
+
+        prefix = base[:-1]
+        start_digit = base[-1]
+        if not start_digit.isdigit():
+            continue
+
+        start = int(start_digit)
+        end = int(end_str)
+        if end < start:
+            continue
+
+        dids.extend(f"{prefix}{d}" for d in range(start, end + 1))
+
+    return dids
 
 
 @router.get("/available-dids")
